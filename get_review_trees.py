@@ -1,103 +1,123 @@
+import sys
+import json
 import openreview
 import pptree
 import collections
 import time
 
 
-PUBLIC_COMMENT_URL = 'ICLR.cc/2019/Conference/-/Paper.*/Public_Comment'
-OFFICIAL_REVIEW_URL = 'ICLR.cc/2019/Conference/-/Paper.*/Official_Review'
+class NoteNode(object):
 
-class Note:
-
-  def __init__(self, note_id, author, creation_time, reply_to=None):
-    self.note_id = note_id
-    self.author = author
-    self.creation_time = creation_time
+  def __init__(self, note, reply_to=None):
+    self.note_id = note.id
+    self.author = note.signatures[0].split("/")[-1]
+    self.creation_time = get_strdate(note)
     self.replies = []
     if reply_to:
-        reply_to.replies.append(self)
+      self.depth = reply_to.depth + 1
+      reply_to.replies.append(self)
+    else:
+      self.depth = 0
 
   def __str__(self):
-    return self.note_id
+    return self.author
 
 
-def get_notes_from_url(client, invitation):
-  return list(
-      openreview.tools.iterget_notes(client, invitation=invitation))
-
-def add_children(parent, children, node_map, parents):
+def add_child(child, parent, node_map, note_map, parents):
   if parent not in node_map:
     grandparent = parents[parent]
-    add_children(grandparent, children[grandparent], node_map, parents)
-  new_node = pptree.Node(child, node_map[parent])
+    add_child(parent, grandparent, node_map, note_map, parents)
+  child_note = note_map[child]
+  new_node = NoteNode(child_note, node_map[child_note.replyto])
   node_map[child] = new_node
 
+def mean(vals):
+  return sum(vals)/float(len(vals))
 
+class Forum(object):
+  def __init__(self, forum_id, client):
+    self.forum_id = forum_id
+    notes = client.get_notes(forum=forum_id)
+    self.note_map = {note.id:note for note in notes}
 
-def add_child(parent, child, node_map, parents):
-  if parent not in node_map:
-    grandparent = parents[parent]
-    add_child(grandparent, parent, node_map, parents)
-  new_node = pptree.Node(child, node_map[parent])
-  node_map[child] = new_node
+    parent_map = {note.id: note.replyto for note in notes
+        if note.replyto is not None}
 
-def convert_note_list_to_trees(note_list):
-  pairs = [(note.id, note.replyto) for note in note_list]
-  children, parents = zip(*pairs)
-  roots = sorted(list(set(parents) - set(children)))
+    children, parents = zip(*((k,v) for k,v in parent_map.items()))
+    roots = set(parents) - set(children)
+    #TODO Fix this assumption
+    for root in roots:
+      try:
 
-  node_map = {root:pptree.Node(root) for root in roots}
+        self.node_map = {}
 
-  children = collections.defaultdict(list)
-  parents = {}
-  for child, parent in pairs:
-    children[parent].append(child)
-    parents[child] = parent
+        root_note = self.note_map[root]
+        root_node = NoteNode(root_note)
+        self.node_map[root] = root_node
 
-  for parent, children in children.items():
-    for child in children:
-      add_child(parent, child, node_map, parents)
+        for non_root in children:
+          if non_root == root:
+            continue
+          note = self.note_map[non_root]
+          if note.replyto is None:
+            continue
+          add_child(non_root, note.replyto, self.node_map, self.note_map, parent_map)
+        self.root_node = self.node_map[root]
+        break
+      except KeyError:
+        pass
 
-  return node_map, roots
+  def get_branching_factor(self):
+    num_non_root = len(self.node_map) - 1
+    num_non_leaf = len([node for node in self.node_map.values() if not
+        node.replies])
+    return num_non_root/num_non_leaf
 
-class NoteNode:
+  def get_stats(self):
+    depths = [node.depth for node in self.node_map.values()]
+    mean_depth = mean(depths)
+    max_depth = max(depths)
+    num_messages = len(self.node_map)
+    num_participants = len(set(node.author for node in self.node_map.values()))
+    branching_factor = self.get_branching_factor()
+    return (self.forum_id, mean_depth, max_depth, branching_factor, num_messages,
+        num_participants)
 
-    def __init__(self, or_note, head=None):
-        self.or_note = or_note
-        self.replies = []
-        if head:
-            head.replies.append(self)
-
-    def __str__(self):
-        return "huh"
 
 def get_strdate(note):
   return time.strftime(
       '%Y-%m-%d %H:%M:%S', time.localtime(note.tmdate/1000))
 
+def get_forum_ids():
+  forum_ids = []
+  with open("iclr19_metadata.jsonl", 'r') as f:
+    for line in f:
+      forum_ids.append(json.loads(line)["forum"])
+  return forum_ids
+
 def main():
   guest_client = openreview.Client(baseurl='https://openreview.net')
 
-  note_list = sum([
-      get_notes_from_url(guest_client, PUBLIC_COMMENT_URL),
-      get_notes_from_url(guest_client, OFFICIAL_REVIEW_URL)], [])
+  forum_ids = get_forum_ids()
 
-  note_map = {note.id + " " + get_strdate(note):note for note in note_list}
+  forums = {}
+  records = []
+  for forum_id in forum_ids:
+    try:
+      new_forum = Forum(forum_id, guest_client)
+      forums[forum_id] = new_forum
 
-  node_map, roots = convert_note_list_to_trees(note_list)
+      sys.stdout = open("trees/"+forum_id+".txt", 'w')
+      pptree.print_tree(new_forum.root_node, "replies")
+      records.append(new_forum.get_stats())
+      
+    except AttributeError as e:
+      print(e)
+  with open("tree_details.tsv", 'w') as f:
+    for record in records:
+      f.write("\t".join(str(i) for i in record) + "\n")
+      
 
-  for root in roots:
-    pptree.print_tree(node_map[root])
-
-  _unused_stuff = """
-  signature_tails = []
-  for k, v in note_map.items():
-    signature_tails.append(v.signatures[0].split("/")[-1])
-
-  b = collections.Counter(signature_tails)
-
-  for k,v in b.most_common():
-    print(str(v) + "\t" + k)"""
 
 if __name__ == "__main__":
   main()
