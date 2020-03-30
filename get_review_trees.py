@@ -36,8 +36,10 @@ def mean(vals):
 
 class Forum(object):
   def __init__(self, forum_id, client):
+
     self.forum_id = forum_id
     notes = client.get_notes(forum=forum_id)
+    print(notes[0].content.get("rating", ""))
     self.note_map = {note.id:note for note in notes}
 
     parent_map = {note.id: note.replyto for note in notes
@@ -114,7 +116,7 @@ def main():
     except AttributeError as e:
       print(e)
   with open("tree_details.tsv", 'w') as f:
-    for record in records:
+    for i, record in enumerate(records[:100]):
       f.write("\t".join(str(i) for i in record) + "\n")
       
 
