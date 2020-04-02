@@ -39,16 +39,25 @@ class Forum(object):
 
     self.forum_id = forum_id
     notes = client.get_notes(forum=forum_id)
-    print(notes[0].content.get("rating", ""))
+
     self.note_map = {note.id:note for note in notes}
+
+    print("\n".join(sorted(self.note_map.keys())))
+
+    print()
+
+    for n in notes:
+      print("\t".join([n.id, str(n.replyto)]))
 
     parent_map = {note.id: note.replyto for note in notes
         if note.replyto is not None}
 
     children, parents = zip(*((k,v) for k,v in parent_map.items()))
     roots = set(parents) - set(children)
+
+    self.root_node = None
     #TODO Fix this assumption
-    for root in roots:
+    for root in roots.intersection(set(self.note_map.keys())):
       try:
 
         self.node_map = {}
@@ -56,18 +65,31 @@ class Forum(object):
         root_note = self.note_map[root]
         root_node = NoteNode(root_note)
         self.node_map[root] = root_node
+        print("a")
 
         for non_root in children:
           if non_root == root:
             continue
           note = self.note_map[non_root]
+          print("b")
           if note.replyto is None:
             continue
-          add_child(non_root, note.replyto, self.node_map, self.note_map, parent_map)
+          if note.replyto not in self.note_map:
+            print("&&", note.id, note.replyto)
+            continue
+          add_child(non_root, note.replyto, self.node_map, self.note_map,
+              parent_map)
+        print("d", root)
         self.root_node = self.node_map[root]
+        print("c")
         break
-      except KeyError:
+      except KeyError as e:
+        dsdsa
+        print(e)
         pass
+    if self.root_node is None:
+      del self.root_node
+      dsdsp
 
   def get_branching_factor(self):
     num_non_root = len(self.node_map) - 1
@@ -82,13 +104,14 @@ class Forum(object):
     num_messages = len(self.node_map)
     num_participants = len(set(node.author for node in self.node_map.values()))
     branching_factor = self.get_branching_factor()
-    return (self.forum_id, mean_depth, max_depth, branching_factor, num_messages,
-        num_participants)
+    return (self.forum_id, mean_depth, max_depth, branching_factor,
+        num_messages, num_participants)
 
 
 def get_strdate(note):
   return time.strftime(
       '%Y-%m-%d %H:%M:%S', time.localtime(note.tmdate/1000))
+
 
 def get_forum_ids():
   forum_ids = []
@@ -97,6 +120,7 @@ def get_forum_ids():
       forum_ids.append(json.loads(line)["forum"])
   return forum_ids
 
+
 def main():
   guest_client = openreview.Client(baseurl='https://openreview.net')
 
@@ -104,19 +128,27 @@ def main():
 
   forums = {}
   records = []
-  for forum_id in forum_ids:
+  for i, forum_id in enumerate(forum_ids):
     try:
       new_forum = Forum(forum_id, guest_client)
       forums[forum_id] = new_forum
 
-      sys.stdout = open("trees/"+forum_id+".txt", 'w')
+      print(forum_id)
+      #print(str(new_forum))
+      notes = guest_client.get_notes(forum=forum_id)
+      for n in notes:
+        print(n.replyto, n.id)
+      print()
+      #for n in notes:
+      #  print(n)
+
       pptree.print_tree(new_forum.root_node, "replies")
       records.append(new_forum.get_stats())
       
     except AttributeError as e:
-      print(e)
+      print("**" + str(e) + "\t" + forum_id)
   with open("tree_details.tsv", 'w') as f:
-    for i, record in enumerate(records[:100]):
+    for record in records:
       f.write("\t".join(str(i) for i in record) + "\n")
       
 
