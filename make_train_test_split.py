@@ -1,4 +1,4 @@
-
+import random
 import collections
 import json
 import openreview
@@ -8,32 +8,6 @@ import sys
 import time
 
 from tqdm import tqdm
-
-def get_strdate(note):
-  return time.strftime(
-      '%Y-%m-%d %H:%M:%S', time.localtime(note.tmdate/1000))
-
-def get_stats(self):
-  depths = [node.depth for node in self.node_map.values()]
-  mean_depth = mean(depths)
-  max_depth = max(depths)
-  num_messages = len(self.node_map)
-  num_participants = len(set(node.author for node in self.node_map.values()))
-  branching_factor = self.get_branching_factor()
-  return (self.forum_id, mean_depth, max_depth, branching_factor,
-      num_messages, num_participants)
-
-
-
-def get_forum_ids(guest_client, invitation):
-  submissions = openreview.tools.iterget_notes(
-        guest_client, invitation='ICLR.cc/2019/Conference/-/Blind_Submission')
-  return [n.forum for n in submissions]
-
-
-def get_author(signatures):
- return "_".join(sorted(sig.split("/")[-1] for sig in signatures))
-
 
 class NoteNode(object):
 
@@ -54,6 +28,14 @@ class NoteNode(object):
   def __str__(self):
     return self.author
 
+
+def get_strdate(note):
+  return time.strftime(
+      '%Y-%m-%d %H:%M:%S', time.localtime(note.tmdate/1000))
+
+
+def get_author(signatures):
+ return "_".join(sorted(sig.split("/")[-1] for sig in signatures))
 
 def add_child(child, parent, node_map, note_map, parents):
   if parent not in node_map:
@@ -83,6 +65,13 @@ def shortened_author(author):
     return "S" # Spectator
   else:
     return "N" # Actual name
+
+def get_forum_ids(guest_client, invitation):
+  submissions = openreview.tools.iterget_notes(
+        guest_client, invitation='ICLR.cc/2019/Conference/-/Blind_Submission')
+  return [n.forum for n in submissions]
+
+
 
 
 def get_parent_index(node, ordered_nodes):
@@ -137,6 +126,8 @@ class Forum(object):
         assert note.id is not None
         status = add_child(note_id, note.replyto,
             self.node_map, self.note_map, parents)
+    
+    self.num_notes = len(self.node_map)
 
     
   def get_branching_factor(self):
@@ -157,26 +148,81 @@ class Forum(object):
     return lines
 
 
+CONFERENCE_MAP = {
+    "iclr19": 'ICLR.cc/2019/Conference/-/Blind_Submission',
+    }
+
+TRAIN, DEV, TEST = ("train", "dev", "test")
+
+def split_forums(forums):
+  random.shuffle(forums)
+  train_threshold = int(0.6 * len(forums))
+  dev_threshold = int(0.8 * len(forums))
+
+  return (forums[:train_threshold],
+      forums[train_threshold:dev_threshold], forums[dev_threshold:])
+
+
 def main():
 
-  output_dir = sys.argv[1]
+  output_dir, conference = sys.argv[1:3]
 
   guest_client = openreview.Client(baseurl='https://openreview.net')
-  INVITATION = 'ICLR.cc/2019/Conference/-/Blind_Submission'
 
-  forum_ids = get_forum_ids(guest_client, INVITATION)
+  forum_ids = get_forum_ids(guest_client, CONFERENCE_MAP[conference])
 
-  print("Got ", len(forum_ids), " forum ids.")
+  len_counter = collections.Counter()
 
   all_lines = []
+  forums = []
   for forum_id in tqdm(forum_ids):
     new_forum = Forum(forum_id, guest_client)
-    all_lines += new_forum.print_out_comments(output_dir, "ICLR2019_")
+    len_counter[new_forum.num_notes] += 1
+    forums.append(new_forum)
 
-  with open(os.path.join(output_dir, "ICLR_2019_notes.txt"), 'w') as f:
-    f.write("\n".join(all_lines))
+  total_notes = sum(len_counter.values())
+  bottom_quintile_count = int(0.2 * total_notes)
+  top_quintile_count = int(0.8 * total_notes)
+
+  bottom_quintile_num_posts = None
+  top_quintile_num_posts = None
+
+  num_notes_seen = 0
+  for num_posts in sorted(len_counter.keys()):
+    num_notes = len_counter[num_posts]
+    num_notes_seen += num_notes
+    if bottom_quintile_num_posts is None:
+      if num_notes_seen > bottom_quintile_count:
+        bottom_quintile_num_posts = num_posts
+    elif top_quintile_num_posts is None:
+      if num_notes_seen > top_quintile_count:
+        top_quintile_num_posts = num_posts
+        break
+
+  small_forums = [forum for forum in forums if forum.num_notes <=
+    bottom_quintile_num_posts]
+
+  large_forums = [forum for forum in forums if forum.num_notes >=
+    top_quintile_num_posts]
+
+  medium_forums = [forum 
+    for forum in forums
+    if forum not in small_forums and forum not in large_forums]
+
+  forum_name_map = collections.defaultdict(list)
+
+  for forum_set in [small_forums, medium_forums, large_forums]:
+    train, dev, test = split_forums(forum_set)
+    forum_name_map[TRAIN] += [forum.forum_id for forum in train]
+    forum_name_map[DEV] += [forum.forum_id for forum in dev]
+    forum_name_map[TEST] += [forum.forum_id for forum in test]
+
+  dataset = {"conference": conference,
+    "id_map": forum_name_map}
+
+  with open(conference + "_split.json", 'w') as f:
+    f.write(json.dumps(dataset))
 
 
-    
 if __name__ == "__main__":
   main()
