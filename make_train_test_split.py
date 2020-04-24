@@ -211,13 +211,15 @@ def main():
 
   forum_name_map = collections.defaultdict(list)
 
-  for forum_set in [small_forums, medium_forums, large_forums]:
+  for forum_set in [medium_forums, small_forums, large_forums]:
     train, dev, test = split_forums(forum_set)
     forum_name_map[TRAIN] += [forum.forum_id for forum in train]
     forum_name_map[DEV] += [forum.forum_id for forum in dev]
     forum_name_map[TEST] += [forum.forum_id for forum in test]
 
+
   dataset = {"conference": conference,
+      "url": CONFERENCE_MAP[conference],
     "id_map": forum_name_map}
 
   with open(conference + "_split.json", 'w') as f:
