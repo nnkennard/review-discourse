@@ -7,7 +7,7 @@ import torch
 import tqdm
 from transformers import BertModel, BertTokenizer
 
-FORUM_ID, NOTE_ID, IDK_2, IDK_3, TOKEN = range(5)
+FORUM_ID, NOTE_ID, IDK_2, IDK_3, TOKEN, LEMMA, POS = range(7)
 
 def make_para_id(fields):
   return fields[FORUM_ID] + "_" + fields[NOTE_ID]
@@ -93,7 +93,7 @@ def bert_encode(dataset):
 
 
 def count_unigrams_bigrams(tokens):
-  unigrams = [x.lower() for x in tokens]
+  unigrams = [x.lower() for x in tokens if x not in ["RARE", "SYMB"]]
   bigrams = [x + "_" + y for x, y in zip(unigrams[:-1], unigrams[1:])]
   return collections.Counter(unigrams + bigrams)
 
@@ -110,9 +110,12 @@ def get_unigram_bigram_vectors(dataset):
   return vectors
 
 def idf_transform(vectors, sentences, num_features=5000):
-  doc_count = collections.Counter(sum(sentences, []))
+  print("IDF transformation")
+  doc_count = collections.Counter()
+  for sentence in sentences:
+    doc_count.update(sentence)
 
-  features = [k for k, v in doc_count.most_common(num_features)]
+  features = [k for k, v in doc_count.most_common(num_features)[100:]]
 
   idf_map = collections.defaultdict(dict)
 
@@ -121,7 +124,7 @@ def idf_transform(vectors, sentences, num_features=5000):
     vector_builder = {term: 0.0 for term in features}
     for feature, value in orig_vector.items():
       if feature in features:
-        vector_builder[feature] = value / doc_count[feature]
+        vector_builder[feature] = doc_count[feature]
     new_vectors.append(
         np.array([vector_builder[feature] for feature in features]))
 
