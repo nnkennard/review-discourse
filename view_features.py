@@ -4,37 +4,53 @@ import collections
 import pickle
 import sys
 
+from encode import Dataset
 
-def nearest_neighbors_calc(vectors, num_neighbors):
-  ordered_vectors = []
-  print("Making the vectors")
-  for para_id in tqdm.tqdm(sorted(vectors.keys())):
-    sentence, vector = vectors[para_id]
-    np_vec = np.array([vector[key] for key in sorted(vector.keys())])
-    ordered_vectors.append(np_vec)
+def print_sentence(sentence):
+  print(" ".join(sentence))
 
-  X = np.array(ordered_vectors)
-  nearest_neighbor_map = []
-  ordered_keys = sorted(vectors.keys())
-  ordered_vectors = np.array([vectors[k] for k in ordered_keys])
-  for sent_id, (sentence, vector) in vectors.items():
-    distances = np.dot(vector, ordered_vectors)
-    nearest_neighbor_map[sent_id] = [ordered_keys[i] for i in
-    np.argsort(distances)[:5]]
-    print([ordered_keys[i] for i in np.argsort(distances)[:5]])
-    break
+def get_top_features(vector, features, k=10):
+  return [k for k, _ in collections.Counter(
+      {features[i]:list(vector)[i]
+        for i in range(len(features))}).most_common(k)]
+
+
+def print_nearest_neighbors(sentences, main_sentence, indices, features, vectors):
+  print("Nearest neighbors of:")
+  print_sentence(sentences[main_sentence])
+  print()
+  for i in indices:
+    print_sentence(sentences[i])
+  print("_" * 80)
+
+  if features is not None:
+    print("|".join(get_top_features(vectors[main_sentence], features)))
+    print()
+    for i in indices:
+      print("|".join(get_top_features(vectors[i], features)))
+    print("_" * 80)
+
+def nearest_neighbors_calc(dataset, num_neighbors):
+
+  nearest_neighbor_map = {}
+
+  for i, (sentence_id, vector) in enumerate(zip(dataset.sentence_ids,
+    dataset.vectors)):
+    distances = np.dot(dataset.vectors, vector)
+
+    nearest_neighbor_map[sentence_id] = np.argsort(distances)[:5]
+    print_nearest_neighbors(dataset.sentences, i,
+        np.argsort(distances)[-5:], dataset.features, dataset.vectors)
+
   return nearest_neighbor_map
 
 def main():
   input_pickle_file = sys.argv[1]
 
   with open(input_pickle_file, 'rb') as f:
-    feature_map = pickle.load(f)
-    nn_map = nearest_neighbors_calc(feature_map, 5)
-
-  #for sent_id, (sentence, vector) in feature_map.items():
-  #  print(sentence + "\t" + "|".join(k for k, v in
-  #    collections.Counter(vector).most_common() if v > 0.0))
+    dataset = pickle.load(f)
+    
+  nn_map = nearest_neighbors_calc(dataset, 5)
 
 
 if __name__ == "__main__":

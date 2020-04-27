@@ -68,7 +68,7 @@ def shortened_author(author):
 
 def get_forum_ids(guest_client, invitation):
   submissions = openreview.tools.iterget_notes(
-        guest_client, invitation='ICLR.cc/2019/Conference/-/Blind_Submission')
+        guest_client, invitation=invitation)
   return [n.forum for n in submissions]
 
 
@@ -136,20 +136,9 @@ class Forum(object):
         node.replies])
     return num_non_root/num_non_leaf
 
-  def print_out_comments(self, output_dir, prefix):
-    lines = []
-    for note_id, note in self.note_map.items():
-      output_file = os.path.join(output_dir, prefix + note_id + ".txt")
-      if "comment" in note.content:
-        lines.append("\t".join(
-          [self.forum_id, note_id,
-            note.content["comment"].replace("\t", " ").replace("\n", "NEWLINE")]))
-
-    return lines
-
-
 CONFERENCE_MAP = {
     "iclr19": 'ICLR.cc/2019/Conference/-/Blind_Submission',
+    "iclr20": 'ICLR.cc/2020/Conference/-/Blind_Submission',
     }
 
 TRAIN, DEV, TEST = ("train", "dev", "test")
@@ -165,7 +154,7 @@ def split_forums(forums):
 
 def main():
 
-  output_dir, conference = sys.argv[1:3]
+  conference = sys.argv[1]
 
   guest_client = openreview.Client(baseurl='https://openreview.net')
 

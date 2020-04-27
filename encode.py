@@ -7,7 +7,7 @@ import torch
 import tqdm
 from transformers import BertModel, BertTokenizer
 
-FORUM_ID, NOTE_ID, IDK_2, IDK_3, TOKEN, LEMMA, POS = range(7)
+FORUM_ID, NOTE_ID, IDK_2, IDK_3, TOKEN, MOD_TOKEN, LEMMA, POS = range(8)
 
 def make_para_id(fields):
   return fields[FORUM_ID] + "_" + fields[NOTE_ID]
@@ -43,7 +43,7 @@ def read_conll_file(filename):
   return paragraphs
 
 def get_sentence_tokens(field_list):
-  return [fields[TOKEN] for fields in field_list]
+  return [fields[MOD_TOKEN] for fields in field_list]
 
 def sent_vec_from_bert_output(output):
   return output[0][-1][-1].numpy()
@@ -164,13 +164,13 @@ def main():
   print("Preparing BOW vectors")
   bow_dataset = bow_encode(conll_dataset, 5000)
   bow_output_pickle_file = input_conll_file.replace(
-      ".parse", ".ub_idf.pkl")
+      ".parse.proc", ".parse.proc.ub_idf.pkl")
   dump_dataset(bow_dataset, bow_output_pickle_file)
 
   print("Preparing BERT vectors")
   bert_dataset = bert_encode(conll_dataset)
   bert_output_pickle_file = input_conll_file.replace(
-      ".parse", ".bert.pkl")
+      ".parse.proc", ".parse.proc.bert.pkl")
   dump_dataset(bert_dataset, bert_output_pickle_file)
 
 if __name__ == "__main__":
