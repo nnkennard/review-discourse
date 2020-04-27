@@ -7,6 +7,7 @@ fuzzywuzzy==0.17.0
 idna==2.8
 joblib==0.14.1
 nltk==3.5
+numpy==1.18.3
 openreview-py==1.0.9
 ortools==7.4.7247
 phrasemachine==1.0.7
@@ -16,8 +17,10 @@ pycryptodome==3.9.4
 pylatexenc==2.1
 regex==2020.4.4
 requests==2.22.0
+scipy==1.4.1
 six==1.14.0
 tld==0.10
+torch==1.5.0
 tqdm==4.42.0
 urllib3==1.25.8
 wrapt==1.11.2

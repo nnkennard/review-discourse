@@ -23,8 +23,8 @@ def main():
 
   print(dataset)
 
-  query_vecs = torch.from_numpy(dataset.vectors).cuda().detach()
-  dists = dist_mat(torch.from_numpy(query.vecs))
+  query_vecs = torch.from_numpy(dataset.vectors[:6000]).cuda().detach()
+  dists = dist_mat(query_vecs)
   print(dists[:10])
 
 if __name__ == "__main__":
