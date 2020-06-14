@@ -64,18 +64,19 @@ def main():
 
   with corenlp.CoreNLPClient(
       annotators="tokenize ssplit pos lemma ner depparse".split(),
-      endpoint="http://localhost:9191", timeout=100000,
+      endpoint="http://localhost:9191", timeout=1000000, be_quiet=False,
       output_format="conll") as nlp_client:
 
     iclr_client = openreview.Client(baseurl='https://openreview.net')
     with open(dataset_file, 'r') as f:
       dataset_obj = json.loads(f.read())
 
-    train_set = Dataset(iclr_client, nlp_client,
-        dataset_obj["id_map"]["train"])
+  for set_split in ["dev", "test"]:
+    split_set = Dataset(iclr_client, nlp_client,
+        dataset_obj["id_map"][set_split])
 
-  with open(dataset_file.split(".")[0] + "_train.parse", 'w') as f:
-    f.write("\n".join(train_set.get_all_notes()))
+    with open(dataset_file.split(".")[0] + "_" + set_split + ".parse", 'w') as f:
+      f.write("\n".join(split_set.get_all_notes()))
   
 
 if __name__ == "__main__":
