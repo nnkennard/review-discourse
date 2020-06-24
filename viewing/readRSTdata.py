@@ -16,7 +16,16 @@ def get_fields(line, field_map):
 Relation = collections.namedtuple(
   'Relation', 'nuc_start nuc_end sat_start sat_end relation')
 
-def listify(merge_filename, field_map):
+def get_relations_from_tree(root):
+  relations = [root.get_relation()]
+  if root.left is not None:
+    relations += get_relations_from_tree(root.left)
+  if root.right is not None:
+    relations += get_relations_from_tree(root.right)
+  return relations
+
+
+def actual_listify(merge_filename, field_map):
 
   with open(merge_filename, 'r') as f:
     lines = f.readlines()
@@ -36,23 +45,10 @@ def listify(merge_filename, field_map):
   if current_sentence:
     assert False
 
-  spans = {}
-  token_labels = sum(overall_maps["EDU"], []) + ["DUMMY"]
-  span_start_finder = 0
-  span_end_finder = 0
+  return overall_maps
 
-  while span_end_finder < len(token_labels) - 1: # -1 due to dummy
-    while token_labels[span_end_finder] == token_labels[span_start_finder]:
-      span_end_finder += 1
-    assert token_labels[span_start_finder] == token_labels[span_end_finder - 1]
-    spans[token_labels[span_start_finder]] = (span_start_finder,
-        span_end_finder)
-    span_start_finder = span_end_finder
-  
-  overall_maps["spans"] = spans
-
-  brackets_file = merge_filename.replace(".merge", ".brackets")
-  with open(brackets_file, 'r') as f:
+def get_tree_from_brackets(brackets_filename):
+  with open(brackets_filename, 'r') as f:
     brackets = [eval(line) for line in f]
 
   last_edu = brackets[-1][0][1]
@@ -75,14 +71,46 @@ def listify(merge_filename, field_map):
     if not start == end:
       ancestor_stack.append(new_node)
 
+  return root
 
-  for node in all_nodes:
-    token_span = spans[node.start][0], spans[node.end][1]
-    print(token_span, node.rel, node.ns)
+
+
+def listify(merge_filename, field_map):
+
+  overall_maps = actual_listify(merge_filename, field_map)
+
+  spans = {}
+  token_labels = list(int(i) for i in sum(overall_maps["EDU"], [])) + ["DUMMY"]
+  span_start_finder = 0
+  span_end_finder = 0
+
+  while span_end_finder < len(token_labels) - 1: # -1 due to dummy
+    while token_labels[span_end_finder] == token_labels[span_start_finder]:
+      span_end_finder += 1
+    assert token_labels[span_start_finder] == token_labels[span_end_finder - 1]
+    spans[token_labels[span_start_finder]] = (span_start_finder,
+        span_end_finder)
+    span_start_finder = span_end_finder
+  
+  brackets_filename = merge_filename.replace(".merge", ".brackets")
+  tree = get_tree_from_brackets(brackets_filename)
+
+  relations = get_relations_from_tree(tree)
+  should_be_none = relations.pop(0)
+  assert should_be_none is None
+  
+  for nuc, sat, rel in relations:
+    overall_spans["rels"].append(
+      (spans[nuc.start][0], spans[nuc.end][1], spans[sat.start][0],
+        spans[sat.end][1], rel))
+
+  print(overall_spans.keys())
 
 
   return overall_maps
 
+NUCLEUS = "Nucleus"
+SATELLITE = "Satellite"
     
 class Node(object):
   def __init__(self, span_start, span_end, ns, rel, parent=None):
@@ -95,7 +123,30 @@ class Node(object):
     self.left = None
     self.right = None
 
+  def __str__(self):
+    return "({0}, {1})".format(self.start, self.end)
 
+  def get_relation(self):
+    if self.ns == ROOT:
+      return None
+    
+    if self == self.parent.left:
+      sibling = self.parent.right
+    else:
+      assert self == self.parent.right
+      sibling = self.parent.left
+
+    maybe_nuc = self
+    maybe_sat = sibling
+
+    if self.ns == SATELLITE:
+      maybe_nuc, maybe_sat = maybe_sat, maybe_nuc
+    else:
+      assert self.ns == NUCLEUS
+
+    return maybe_nuc, maybe_sat, self.rel
+
+    
 FIELDS_MAP = {
     "TOKEN": 2,
     "EDU": -1
@@ -113,6 +164,7 @@ def main():
     listified_dataset = listify(merge_filename, FIELDS_MAP)
     listified_dataset["comment_id"] = comment_id
     output_lines.append(json.dumps(listified_dataset))
+    exit()
 
 
   with open(output_file, 'w') as f:
