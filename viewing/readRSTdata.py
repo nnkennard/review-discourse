@@ -77,7 +77,8 @@ def listify(merge_filename, field_map):
 
 
   for node in all_nodes:
-    token_span = 
+    token_span = spans[node.start][0], spans[node.end][1]
+    print(token_span, node.rel, node.ns)
 
 
   return overall_maps
