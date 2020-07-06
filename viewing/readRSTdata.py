@@ -3,6 +3,7 @@ import glob
 import json
 import os
 import sys
+import yaml
 
 ROOT = "ROOT"
 
@@ -34,6 +35,7 @@ def actual_listify(merge_filename, field_map):
   current_sentence = collections.defaultdict(list)
 
   for line in lines:
+    line = line.replace("`", 'TICK')
     if not line.strip():
       for k, v in current_sentence.items():
         overall_maps[k].append(v)
@@ -75,7 +77,7 @@ def get_tree_from_brackets(brackets_filename):
 
 
 
-def listify(merge_filename, field_map):
+def listify(merge_filename, field_map, comment_id):
 
   overall_maps = actual_listify(merge_filename, field_map)
 
@@ -99,15 +101,19 @@ def listify(merge_filename, field_map):
   should_be_none = relations.pop(0)
   assert should_be_none is None
   
+  final_map = {"rels": [],
+              "tokens": sum(overall_maps["TOKEN"], []),
+              "comment_id": comment_id}
+
+  overall_maps["rels"] = []
   for nuc, sat, rel in relations:
-    overall_spans["rels"].append(
+    if rel == "span":
+      continue
+    final_map["rels"].append(
       (spans[nuc.start][0], spans[nuc.end][1], spans[sat.start][0],
         spans[sat.end][1], rel))
 
-  print(overall_spans.keys())
-
-
-  return overall_maps
+  return final_map
 
 NUCLEUS = "Nucleus"
 SATELLITE = "Satellite"
@@ -157,21 +163,16 @@ def main():
 
   input_dir, output_file = sys.argv[1:3]
 
-  output_lines = []
+  output = []
 
   for merge_filename in glob.glob(input_dir +"/*.merge"):
     comment_id = merge_filename.split("/")[-1].split(".")[0]
-    listified_dataset = listify(merge_filename, FIELDS_MAP)
-    listified_dataset["comment_id"] = comment_id
-    output_lines.append(json.dumps(listified_dataset))
-    exit()
-
+    listified_dataset = listify(merge_filename, FIELDS_MAP, comment_id)
+    output.append(listified_dataset)
 
   with open(output_file, 'w') as f:
-    f.write("\n".join(output_lines))
-
-
-
+    f.write(json.dumps(output))
+    #f.write(yaml.dump(output))
 
 
 if __name__ == "__main__":
