@@ -50,7 +50,6 @@ class NoteNode(object):
     return str(self.author) + str(self.reply_to_id) +  str(self.text)
 
 
-
 class Dataset(object):
   def __init__(self, forum_list, client, conference, split):
     
@@ -72,7 +71,6 @@ class Dataset(object):
       node_map.update(forum_node_map)
 
     return root_map, node_map
-
 
   def _get_forum_non_orphans(self, parents):
 
@@ -98,7 +96,32 @@ class Dataset(object):
 
     return new_parents 
 
+  def _get_forum_structure(self, forum_id):
+    """Builds the reply structure for one forum."""
 
+    notes = self.client.get_notes(forum=forum_id)
+    node_map = {note.id:NoteNode(note) for note in notes}
+    naive_parents = {note.id:note.replyto for note in notes}
+
+    parents = self._get_forum_non_orphans(naive_parents)
+    available_notes = set(parents.keys()).union(
+        set(parents.values())) - set([None])
+    new_node_map = {note_id: node for note in notes if note in available_notes}
+
+    return parents, new_node_map
+
+  def dump_to_conll(self, client):
+    lines = []
+    for node_id, node in self.node_map.items():
+      print(node.text)
+      lines.append(client.annotate(node.text))
+      break
+    for i in lines:
+      print(i)
+
+    pass
+
+  _unused_public_fn = """
   def get_non_orphans(self):
     non_orphans = set()
     for forum, parent_structure in self.forum_map.items():
@@ -108,22 +131,9 @@ class Dataset(object):
       assert not non_orphans.intersection(available_notes)
       non_orphans = non_orphans.union(available_notes)
 
-    return sorted(list(non_orphans))
+    return sorted(list(non_orphans))"""
 
-
-  def _get_forum_structure(self, forum_id):
-    """Builds the reply structure for one forum."""
-
-    notes = self.client.get_notes(forum=forum_id)
-    node_map = {note.id:NoteNode(note) for note in notes}
-    parents = {note.id:note.replyto for note in notes}
-
-    parents = self._get_forum_non_orphans(parents)
-    available_notes = set(parents.keys()).union(
-        set(parents.values())) - set([None])
-    new_node_map = {note_id: node for note in notes if note in available_notes}
-
-    return parents, new_node_map
+unused_bad_contextualization = """
 
   def _context_builder(self, current_note_id, forum_structure, context_map):
     if current_note_id in context_map:
@@ -136,8 +146,8 @@ class Dataset(object):
         self._context_builder(parent_id, forum_structure, context_map)
         context_map[current_note_id] = context_map[parent_id] + [self.node_map[parent_id].text]
 
+
   def build_contextualized_examples(self):
-    """Adds context for each node."""
     context_map = collections.defaultdict(list)
     context_map[None] = []
     for forum_id, forum_structure in self.forum_map.items():
@@ -152,7 +162,6 @@ class Dataset(object):
       forum_leaves = set(structure.keys()) - set(structure.values())
       leaves += forum_leaves
     return leaves
-
 
   def dump_contextualized_examples(self, leaves_only=False):
     contextualized_examples = {}
@@ -172,4 +181,4 @@ class Dataset(object):
     "split": self.split,
     "url": INVITATION_MAP[self.conference],
     "examples": contextualized_examples})
-
+"""
