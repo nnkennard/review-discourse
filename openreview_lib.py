@@ -34,6 +34,17 @@ def get_text_if_any(note):
       note.content.get("withdrawal confirmation", "")))
     return maybe_content
 
+def build_conll_lines(conll_text, note_id, parent, root):
+  lines = conll_text.split("\n")
+  new_lines =  ["#begin document ({0})".format(note_id)]
+  assert not lines[-1]
+  for line in lines[:-1]:
+    if not line.strip():
+      new_lines.append(line)
+    else:
+      new_lines.append("\t".join([note_id, parent, root] + line.strip().split()))
+  new_lines += ["#end document"]
+  return new_lines
 
 class NoteNode(object):
 
@@ -69,6 +80,8 @@ class Dataset(object):
       forum_structure, forum_node_map = self._get_forum_structure(forum_id)
       root_map[forum_id] = forum_structure
       node_map.update(forum_node_map)
+
+    print(len(node_map))
 
     return root_map, node_map
 
@@ -106,20 +119,27 @@ class Dataset(object):
     parents = self._get_forum_non_orphans(naive_parents)
     available_notes = set(parents.keys()).union(
         set(parents.values())) - set([None])
-    new_node_map = {note_id: node for note in notes if note in available_notes}
 
+    new_node_map = {note.id: node_map[note.id] for note in notes if note.id in available_notes}
     return parents, new_node_map
 
-  def dump_to_conll(self, client):
-    lines = []
-    for node_id, node in self.node_map.items():
-      print(node.text)
-      lines.append(client.annotate(node.text))
-      break
-    for i in lines:
-      print(i)
+  def _get_parent_and_root(self, node):
+    for forum, parent_map in self.forum_map.items():
+      if node not in parent_map:
+        continue
+      else:
+        return parent_map[node], forum
+    assert False
 
-    pass
+
+  def dump_to_conll(self, filename, client):
+    lines = []
+    for note_id, node in tqdm(self.node_map.items()):
+      with open(filename + note_id + ".txt", 'w') as f:
+        parent, root = self._get_parent_and_root(note_id)
+        conll_lines = build_conll_lines(client.annotate(node.text),
+            note_id, parent, root)
+        f.write("\n".join(conll_lines))
 
   _unused_public_fn = """
   def get_non_orphans(self):
