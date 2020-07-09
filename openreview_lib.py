@@ -34,7 +34,32 @@ def get_text_if_any(note):
       note.content.get("withdrawal confirmation", "")))
     return maybe_content
 
-def build_conll_lines(conll_text, note_id, parent, root):
+def get_constparse_column(parse):
+  squished_parse = " ".join(parse.split())[6:-1]
+  last_open_paren_idx = None
+  looking_for_closed_paren = False
+  paren_pairs = []
+  for i, char in enumerate(squished_parse):
+    if looking_for_closed_paren:
+      if char == ")":
+        paren_pairs.append((last_open_paren_idx, i + 1))
+        looking_for_closed_paren = False
+        last_open_paren_idx = None
+    if char == "(":
+      last_open_paren_idx = i
+      looking_for_closed_paren = True
+  assert looking_for_closed_paren == False
+
+  for start, end in reversed(paren_pairs):
+    squished_parse = squished_parse[:start] + "*\n" + squished_parse[end:]
+
+  parse_col = [field.strip() for field in squished_parse.split("\n")]
+  parse_col = parse_col[:-2] + ["".join([parse_col[-2], parse_col[-1]])]
+  return parse_col
+
+
+def build_conll_lines(conll_text, parse_list, note_id, parent, root):
+  parse_cols = sum(parse_list, [])
   lines = conll_text.split("\n")
   new_lines =  ["#begin document ({0})".format(note_id)]
   assert not lines[-1]
@@ -42,8 +67,12 @@ def build_conll_lines(conll_text, note_id, parent, root):
     if not line.strip():
       new_lines.append(line)
     else:
-      new_lines.append("\t".join([note_id, parent, root] + line.strip().split()))
+      parse = parse_cols.pop(0)
+      new_lines.append("\t".join([note_id, parent, root] + line.strip().split()
+        + [parse]))
   new_lines += ["#end document"]
+
+  assert not parse_cols
   return new_lines
 
 class NoteNode(object):
@@ -66,7 +95,7 @@ class Dataset(object):
     
     submissions = openreview.tools.iterget_notes(
           client, invitation=INVITATION_MAP[conference])
-    self.forums = [n.forum for n in submissions if n.forum in forum_list]
+    self.forums = [n.forum for n in submissions if n.forum in forum_list][:10]
     self.client = client
     self.conference = conference
     self.split = split
@@ -132,13 +161,16 @@ class Dataset(object):
     assert False
 
 
-  def dump_to_conll(self, filename, client):
+  def dump_to_conll(self, filename, conll_client, json_client):
     lines = []
     for note_id, node in tqdm(self.node_map.items()):
       with open(filename + note_id + ".txt", 'w') as f:
         parent, root = self._get_parent_and_root(note_id)
-        conll_lines = build_conll_lines(client.annotate(node.text),
-            note_id, parent, root)
+        parses = [obj["parse"] for obj in
+            json_client.annotate(node.text)["sentences"]]
+        new_parses = [get_constparse_column(parse) for parse in parses] 
+        conll_lines = build_conll_lines(
+            conll_client.annotate(node.text), new_parses, note_id, parent, root)
         f.write("\n".join(conll_lines))
 
   _unused_public_fn = """
