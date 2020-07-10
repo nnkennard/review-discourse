@@ -95,7 +95,7 @@ class Dataset(object):
     
     submissions = openreview.tools.iterget_notes(
           client, invitation=INVITATION_MAP[conference])
-    self.forums = [n.forum for n in submissions if n.forum in forum_list][:10]
+    self.forums = [n.forum for n in submissions if n.forum in forum_list]
     self.client = client
     self.conference = conference
     self.split = split
