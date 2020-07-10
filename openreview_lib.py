@@ -3,8 +3,24 @@ import collections
 import json
 import openreview
 
-
 from tqdm import tqdm
+
+
+def get_datasets(dataset_file):
+  with open(dataset_file, 'r') as f:
+    examples = json.loads(f.read())
+
+  guest_client = openreview.Client(baseurl='https://openreview.net')
+  conference = examples["conference"]
+  assert conference in Conference.ALL 
+
+  datasets = {}
+  for set_split, forum_ids in examples["id_map"].items():
+    dataset = Dataset(forum_ids, guest_client, conference, set_split)
+    datasets[set_split] = dataset
+
+  return datasets
+
 
 class Conference(object):
   iclr19 = "iclr19"
@@ -95,7 +111,7 @@ class Dataset(object):
     
     submissions = openreview.tools.iterget_notes(
           client, invitation=INVITATION_MAP[conference])
-    self.forums = [n.forum for n in submissions if n.forum in forum_list]
+    self.forums = [n.forum for n in submissions if n.forum in forum_list][:]
     self.client = client
     self.conference = conference
     self.split = split
@@ -109,8 +125,6 @@ class Dataset(object):
       forum_structure, forum_node_map = self._get_forum_structure(forum_id)
       root_map[forum_id] = forum_structure
       node_map.update(forum_node_map)
-
-    print(len(node_map))
 
     return root_map, node_map
 
@@ -217,7 +231,6 @@ unused_bad_contextualization = """
 
   def dump_contextualized_examples(self, leaves_only=False):
     contextualized_examples = {}
-    print(len(self.context_map))
     leaves = self._calculate_leaves()
     for example, context in self.context_map.items():
       if example is None:
