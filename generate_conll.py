@@ -6,7 +6,7 @@ import sys
 import openreview_lib as orl
 
 
-ANNOTATORS = "tokenize ssplit pos lemma ner parse depparse".split()
+ANNOTATORS = "tokenize ssplit pos lemma".split()
 
 
 def main():
@@ -23,8 +23,9 @@ def main():
       conference = "iclr19"
       datasets = orl.get_datasets(dataset_file)
       for set_split, dataset in datasets.items():
-        filepath = "const/" + conference + "/" + set_split + "/"
-        dataset.dump_to_conll(filepath, conll_client, json_client)
+        filepath = "tokenized/" + conference + "/" + set_split + "/"
+        dataset.dump_to_conll(filepath, conll_client, json_client,
+            no_parse=True)
 
 
 if __name__ == "__main__":

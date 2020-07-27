@@ -1,3 +1,4 @@
+import csv
 import sys
 import torch
 from transformers import BertForQuestionAnswering
@@ -58,7 +59,7 @@ def create_qa_examples(dataset):
         continue
       questions = get_questions_from_comment(parent)
       qa_examples += [
-          (question, dataset.node_map[child].text)
+          (parent, child, question, dataset.node_map[child].text)
           for question in questions]
 
   return qa_examples
@@ -73,16 +74,14 @@ def main():
   model = BertForQuestionAnswering.from_pretrained('bert-large-uncased-whole-word-masking-finetuned-squad')
   tokenizer = BertTokenizer.from_pretrained('bert-large-uncased-whole-word-masking-finetuned-squad')
 
-  #question = "How many parameters does BERT-large have?"
-  #answer_text = """BERT-large is really big... it has 24-layers and an embedding
-  #size of 1,024, for a total of 340M parameters! Altogether it is 1.34GB, so
-  #expect it to take a couple minutes to download to your Colab instance."""
-  #print(find_answer(question, answer_text, tokenizer, model))
-  
+  records = []
+  with open('iclr19_train_qa.csv', 'w', newline='') as csvfile:
+    spamwriter = csv.writer(csvfile, delimiter='|')
 
-  for question, passage in qa_examples:
-    print(question + "\t" + find_answer(question, passage, tokenizer, model))
-
+    for parent, child, question, passage in qa_examples:
+      spamwriter.writerow([
+        parent, child, question,
+        find_answer(question, passage, tokenizer, model)])
 
 
 if __name__ == "__main__":

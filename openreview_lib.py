@@ -74,8 +74,12 @@ def get_constparse_column(parse):
   return parse_col
 
 
-def build_conll_lines(conll_text, parse_list, note_id, parent, root):
-  parse_cols = sum(parse_list, [])
+def build_conll_lines(conll_text, parse_list, note_id, parent, root,
+    no_parse=False):
+  if parse_list:
+    parse_cols = sum(parse_list, [])
+  else:
+    parse_cols = []
   lines = conll_text.split("\n")
   new_lines =  ["#begin document ({0})".format(note_id)]
   assert not lines[-1]
@@ -83,7 +87,14 @@ def build_conll_lines(conll_text, parse_list, note_id, parent, root):
     if not line.strip():
       new_lines.append(line)
     else:
-      parse = parse_cols.pop(0)
+      if not no_parse:
+        try:
+          parse = parse_cols.pop(0)
+        except IndexError:
+          parse = "_"
+          print("Error in " + root)
+      else:
+        parse = "_"
       new_lines.append("\t".join([note_id, parent, root] + line.strip().split()
         + [parse]))
   new_lines += ["#end document"]
@@ -111,7 +122,7 @@ class Dataset(object):
     
     submissions = openreview.tools.iterget_notes(
           client, invitation=INVITATION_MAP[conference])
-    self.forums = [n.forum for n in submissions if n.forum in forum_list][:]
+    self.forums = [n.forum for n in submissions if n.forum in forum_list][:100]
     self.client = client
     self.conference = conference
     self.split = split
@@ -175,75 +186,21 @@ class Dataset(object):
     assert False
 
 
-  def dump_to_conll(self, filename, conll_client, json_client):
+  def dump_to_conll(self, filename, conll_client, json_client, no_parse=False):
     lines = []
     for note_id, node in tqdm(self.node_map.items()):
       with open(filename + note_id + ".txt", 'w') as f:
         parent, root = self._get_parent_and_root(note_id)
-        parses = [obj["parse"] for obj in
-            json_client.annotate(node.text)["sentences"]]
-        new_parses = [get_constparse_column(parse) for parse in parses] 
+        #parses = [obj["parse"] for obj in
+        #    json_client.annotate(node.text)["sentences"]]
+        #new_parses = [get_constparse_column(parse) for parse in parses] 
+        #if len(node.text) > 5000:
+        #  print("Skipped " + note_id + "; too long")
+        #  continue
+        #conll_lines = build_conll_lines(
+        #    conll_client.annotate(node.text), new_parses, note_id, parent, root)
         conll_lines = build_conll_lines(
-            conll_client.annotate(node.text), new_parses, note_id, parent, root)
+            conll_client.annotate(node.text), None, note_id, parent, root,
+            no_parse)
         f.write("\n".join(conll_lines))
 
-  _unused_public_fn = """
-  def get_non_orphans(self):
-    non_orphans = set()
-    for forum, parent_structure in self.forum_map.items():
-      parents = self._get_forum_non_orphans(parent_structure)
-      available_notes = set(parents.keys()).union(
-        set(parents.values())) - set([None])
-      assert not non_orphans.intersection(available_notes)
-      non_orphans = non_orphans.union(available_notes)
-
-    return sorted(list(non_orphans))"""
-
-unused_bad_contextualization = """
-
-  def _context_builder(self, current_note_id, forum_structure, context_map):
-    if current_note_id in context_map:
-      return
-    else:
-      parent_id = forum_structure[current_note_id]
-      if parent_id is None:
-        context_map[current_note_id] = []
-      elif parent_id not in context_map:
-        self._context_builder(parent_id, forum_structure, context_map)
-        context_map[current_note_id] = context_map[parent_id] + [self.node_map[parent_id].text]
-
-
-  def build_contextualized_examples(self):
-    context_map = collections.defaultdict(list)
-    context_map[None] = []
-    for forum_id, forum_structure in self.forum_map.items():
-      for child, parent in forum_structure.items():
-        self._context_builder(child, forum_structure, context_map)
-    self.context_map = context_map
-
-  def _calculate_leaves(self):
-    leaves = []
-    for forum, structure in self.forum_map.items():
-      # Nodes that are children but never parents
-      forum_leaves = set(structure.keys()) - set(structure.values())
-      leaves += forum_leaves
-    return leaves
-
-  def dump_contextualized_examples(self, leaves_only=False):
-    contextualized_examples = {}
-    leaves = self._calculate_leaves()
-    for example, context in self.context_map.items():
-      if example is None:
-        continue
-      if leaves_only and example not in leaves:
-        continue
-      contextualized_examples[example] = {
-          "context": context,
-          "text": self.node_map[example].text
-      }
-    return json.dumps({
-    "conference": self.conference,
-    "split": self.split,
-    "url": INVITATION_MAP[self.conference],
-    "examples": contextualized_examples})
-"""
