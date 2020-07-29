@@ -26,6 +26,14 @@ def get_text(node_id, all_notes):
   assert len(k) == 1
   return orl.NoteNode(k[0]).text
 
+def tokenize_chunks(chunks, tokenize_client):
+  tokenized_chunks = []
+  for i, chunk in enumerate(chunks):
+    annotated_sentences = tokenize_client.annotate(chunk)
+    tokenized_chunks.append([fields.split("\t")[TOKEN] for fields in
+      annotated_sentences.split("\n") if fields])
+  return tokenized_chunks
+
 class CommentPair(object):
   def __init__(self, parent_node, child_node, node_map, tokenize_client):
 
@@ -38,8 +46,10 @@ class CommentPair(object):
 
     self.qas = self._get_qa_chunks(tokenize_client)
 
-    self.example = QAExample(self.parent_node.note_id, self.parent_chunks,
-        self.child_node.note_id, self.child_chunks, self.qas)
+    self.example = QAExample(self.parent_node.note_id, 
+        tokenize_chunks(self.parent_chunks, tokenize_client),
+        self.child_node.note_id, tokenize_chunks(self.child_chunks,
+          tokenize_client), self.qas)
 
 
 
