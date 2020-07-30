@@ -124,6 +124,51 @@ def get_mini_node_map(structure, node_map):
   all_node_ids = set(structure.keys()).union(set(structure.values())) - set([None])
   return {node_id:node_map[node_id] for node_id in all_node_ids}
 
+
+class SuperNode(object):
+  def __init__(self, top_node):
+    self.text = top_node.text
+    self.top_node_id = top_node.note_id
+    self.node_id = self.top_node_id + "_super"
+    self.included_comment_ids = [self.top_node_id]
+
+  def add_node(self, new_node):
+    self.text += "\n" + new_node.text
+    self.included_comment_ids.append(new_node.note_id)
+
+
+def condense_long_comments(forum_structure, mini_node_map):
+  maybe_roots = [key for key, val in forum_structure.items() if val is None]
+  assert len(maybe_roots) == 1
+  root, = maybe_roots
+
+  stack = [root]
+  follow_on_map = {} # from children to the supernode they are children of
+  new_node_map = {} # new node map
+  while stack:
+    curr_node_id = stack.pop(0)
+    curr_node = mini_node_map[curr_node_id]
+
+    super_node = follow_on_map.get(curr_node, SuperNode(curr_node))
+    new_map[super_node.node_id] = super_node
+
+    for child, parent in forum_structure.items():
+      if parent == curr_node_id:
+        child_node = mini_node_map[child]
+        if child_node.author == curr_node.author:
+          super_node.add_node(child_node)
+          follow_on_map[child] = super_node.top_node_id
+      stack.append(child)
+      else:
+        continue
+
+  if follow_on_map:
+    print(follow_on_map)
+    print(forum_structure)
+    exit()
+
+    
+
 def main():
 
   dataset_file, output_prefix = sys.argv[1:]
@@ -135,6 +180,7 @@ def main():
 
       for forum, structure in tqdm(dataset.forum_map.items()):
         mini_node_map = get_mini_node_map(structure, dataset.node_map)
+        condense_long_comments(structure, mini_node_map)
 
         for child, parent in structure.items():
           maybe_nodes = get_nodes_from_map(child, parent, mini_node_map)
