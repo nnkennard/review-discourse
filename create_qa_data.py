@@ -138,33 +138,53 @@ class SuperNode(object):
 
 
 def condense_long_comments(forum_structure, mini_node_map):
+  print(len(forum_structure))
+  print(forum_structure)
   maybe_roots = [key for key, val in forum_structure.items() if val is None]
   assert len(maybe_roots) == 1
-  root, = maybe_roots
+  root_id, = maybe_roots
 
-  stack = [root]
+  super_nodes = set()
+  super_node_map = {} # Map from node ids to the ids of their super nodes
+
+  stack = [root_id]
   follow_on_map = {} # from children to the supernode they are children of
-  new_node_map = {} # new node map
   while stack:
+    print(len(stack), stack)
+    if len(stack) > 10:
+      break
     curr_node_id = stack.pop(0)
     curr_node = mini_node_map[curr_node_id]
 
-    super_node = follow_on_map.get(curr_node, SuperNode(curr_node))
-    new_map[super_node.node_id] = super_node
+    super_node_map[curr_node_id] = super_node.node_id
+    super_nodes.add(super_node)
+
+    if curr_node_id in super_node_map:
+      super_node = super_node_map[curr_node_id]
+    else:
+      super_node = SuperNode(curr_node)
+
 
     for child, parent in forum_structure.items():
-      if parent == curr_node_id:
+      if parent == curr_node_id: # Only for direct children of current node
+        if child in follow_on_map: # This child is actually a follow on that has already been included
+          # Check that the child's super node is also the parent's super node
+          assert super_node_map[child] == super_node_map[parent]
+          continue
+        stack.append(child)
         child_node = mini_node_map[child]
         if child_node.author == curr_node.author:
           super_node.add_node(child_node)
           follow_on_map[child] = super_node.top_node_id
-      stack.append(child)
       else:
         continue
 
   if follow_on_map:
     print(follow_on_map)
     print(forum_structure)
+    print("follow on map", len(follow_on_map))
+    print(len(forum_structure))
+    print(len(super_nodes))
     exit()
 
     
@@ -174,13 +194,14 @@ def main():
   dataset_file, output_prefix = sys.argv[1:]
 
   with corenlp.CoreNLPClient(annotators=ANNOTATORS, output_format='conll') as corenlp_client:
-    for split, dataset in orl.get_datasets(dataset_file).items():
+    for split, dataset in orl.get_datasets(dataset_file, debug=True).items():
     
       qa_pairs = []
 
       for forum, structure in tqdm(dataset.forum_map.items()):
         mini_node_map = get_mini_node_map(structure, dataset.node_map)
         condense_long_comments(structure, mini_node_map)
+        continue
 
         for child, parent in structure.items():
           maybe_nodes = get_nodes_from_map(child, parent, mini_node_map)

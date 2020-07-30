@@ -6,7 +6,7 @@ import openreview
 from tqdm import tqdm
 
 
-def get_datasets(dataset_file):
+def get_datasets(dataset_file, debug=False):
   with open(dataset_file, 'r') as f:
     examples = json.loads(f.read())
 
@@ -16,7 +16,7 @@ def get_datasets(dataset_file):
 
   datasets = {}
   for set_split, forum_ids in examples["id_map"].items():
-    dataset = Dataset(forum_ids, guest_client, conference, set_split)
+    dataset = Dataset(forum_ids, guest_client, conference, set_split, debug)
     datasets[set_split] = dataset
 
   return datasets
@@ -118,11 +118,13 @@ class NoteNode(object):
 
 
 class Dataset(object):
-  def __init__(self, forum_list, client, conference, split):
+  def __init__(self, forum_list, client, conference, split, debug=False):
     
     submissions = openreview.tools.iterget_notes(
           client, invitation=INVITATION_MAP[conference])
-    self.forums = [n.forum for n in submissions if n.forum in forum_list][:]
+    self.forums = [n.forum for n in submissions if n.forum in forum_list]
+    if debug:
+      self.forums = self.forums[:5]
     self.client = client
     self.conference = conference
     self.split = split
