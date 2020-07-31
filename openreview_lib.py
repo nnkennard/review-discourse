@@ -107,6 +107,7 @@ class NoteNode(object):
   def __init__(self, note, reply_to=None):
     self.note_id = note.id
     self.tcdate = note.tcdate
+    self.title = note.content["title"]
     self.text = get_text_if_any(note)
     self.author = get_author(note.signatures)
     self.creation_time = get_strdate(note)
