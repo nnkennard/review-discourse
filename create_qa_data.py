@@ -15,7 +15,7 @@ QAExample = collections.namedtuple('QAExample',
   'parent_id parent_chunks child_id child_chunks qas')
 
 QACandidate = collections.namedtuple('QACandidate',
-  'parent_chunk_idx child_chunk_idx maybe_question_text')
+  'parent_id parent_chunk_idx child_id child_chunk_idx maybe_question_text')
 
 
 def chunk_text(text):
@@ -63,19 +63,19 @@ def mini_edit_distance(chunk_tokens_1, chunk_tokens_2):
 
 
 def find_chunk_pairs(parent_snode, child_snode):
-  print("Finding chunk pairs", parent_snode.node_id, child_snode.node_id)
+  parent_id, child_id = parent_snode.node_id, child_snode.node_id
   qas = []
   for i, parent_chunk in enumerate(parent_snode.tokenized_chunks):
     for question in parent_snode.question_map[i]:
-      qas.append(QACandidate(i, None, question))
+      qas.append(QACandidate(parent_id, i, child_id, None, question))
     for j, child_chunk in enumerate(child_snode.tokenized_chunks):
       prefix = longest_starting_prefix(parent_chunk, child_chunk)
       if (parent_chunk
           and mini_edit_distance(parent_chunk, child_chunk) < 5
           and j < len(child_snode.tokenized_chunks) - 1):
-        qas.append(QACandidate(i, j, None))
+        qas.append(QACandidate(parent_id, i, child_id, j, None))
       elif len(prefix) > 10 or prefixExistsAndNotAlpha(prefix):
-        qas.append(QACandidate(i, j+1, None))
+        qas.append(QACandidate(parent_id, i, child_id, j+1, None))
   return [qa._asdict() for qa in qas]
 
 
@@ -91,6 +91,14 @@ class SuperNode(object):
     self.question_map = None
     self.tokenized_chunks = None
 
+
+  def serialize(self):
+    return {
+        "node_id": self.node_id,
+        "included_nodes": self.included_nodes,
+        "text": [sum(chunk, []) for chunk in self.tokenized_chunks]
+        }
+
   def add_child(self, child):
     self.children.append(child)
 
@@ -98,7 +106,6 @@ class SuperNode(object):
     self.text += "\n\n" + node.text
     self.children += node.children
     self.included_nodes.append(node.original_id)
-
 
   def process(self, tokenize_client):
     chunks = chunk_text(self.text)
@@ -112,14 +119,10 @@ class SuperNode(object):
         sentences.append(sentence_tokens)
       if sentences:
         self.tokenized_chunks.append(sentences)
-    for i in self.tokenized_chunks:
-      print("A chunk", i)
 
   def get_questions(self):
-    print("Checking for questions :", self.node_id)
     self.question_map = collections.defaultdict(list)
     for i, chunk in enumerate(self.tokenized_chunks):
-      print("A chunk again ", chunk)
       for sentence in chunk:
         if sentence[-1] == "?":
           self.question_map[i].append(" ".join(sentence))
@@ -164,15 +167,10 @@ def restructure(forum_structure, node_map, tokenize_client):
   final_nodes = set(new_supernode_structure.keys()).union(
       set(new_supernode_structure.values())) - set([None])
   for node in final_nodes:
-    print("Processing node:", node)
     supernode_map[node].process(tokenize_client)
 
   original_nodes = set(supernode_structure.keys()).union(
       set(supernode_structure.values())) - set([None])
-
-  print("Deleted nodes")
-  print(original_nodes - final_nodes)
-
 
   for parent_node_id in set(new_supernode_structure.values()):
     # If it's not a parent, questions cannot have been answered
@@ -189,11 +187,7 @@ def restructure(forum_structure, node_map, tokenize_client):
       continue
     qas += find_chunk_pairs(supernode_map[parent], supernode_map[child])
 
-  for i in qas:
-    print(i)
-
-
-  return new_supernode_structure, supernode_map
+  return supernode_map, qas
 
 
 
@@ -202,19 +196,23 @@ def main():
   dataset_file, output_prefix = sys.argv[1:]
 
   with corenlp.CoreNLPClient(annotators=ANNOTATORS, output_format='conll') as corenlp_client:
-    for split, dataset in orl.get_datasets(dataset_file, debug=True).items():
-    
-      qa_pairs = []
+    for split, dataset in orl.get_datasets(dataset_file).items():
+
+      all_nodes = []
+      all_qas = []
 
       for forum, structure in tqdm(dataset.forum_map.items()):
         mini_node_map = get_mini_node_map(structure, dataset.node_map)
-        new_structure, new_nodes = restructure(structure, mini_node_map,
+        nodes, qas = restructure(structure, mini_node_map,
             corenlp_client)
+        all_nodes += nodes.values()
+        all_qas += qas
     
       output_obj = {
       "conference": dataset.conference,
       "split": split,
-      "qa_pairs": qa_pairs
+      "nodes": [node.serialize() for node in all_nodes],
+      "qa_pairs": all_qas
       }
 
       output_filename = "_".join(
