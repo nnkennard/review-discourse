@@ -47,8 +47,9 @@ def mini_edit_distance(chunk_tokens_1, chunk_tokens_2):
   return nltk.edit_distance(squish(chunk_tokens_1)[:100], 
       squish(chunk_tokens_2)[:100])
 
+NEWLINE_TOK = "__NEWLINE"
 
-SEPARATOR_CHUNK = [["CHUNK_SEP"]]
+SEPARATOR_CHUNK = [[NEWLINE_TOK, NEWLINE_TOK]]
 
 
 class SuperNode(object):
