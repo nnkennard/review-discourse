@@ -400,6 +400,7 @@ def evaluate(args, model, tokenizer, prefix=""):
 
 
 def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=False):
+    print("Loading and caching examples")
     if args.local_rank not in [-1, 0] and not evaluate:
         # Make sure only the first process in distributed training process the dataset, and the others will use the cache
         torch.distributed.barrier()
@@ -444,6 +445,13 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
                 examples = processor.get_dev_examples(args.data_dir, filename=args.predict_file)
             else:
                 examples = processor.get_train_examples(args.data_dir, filename=args.train_file)
+
+
+        print("Here is an example")
+        a = examples[0]
+        print(a.qas_id)
+        print(a.question_text)
+        print(a.context_text)
 
         features, dataset = squad_convert_examples_to_features(
             examples=examples,
@@ -759,6 +767,7 @@ def main():
 
     # Training
     if args.do_train:
+        print("I'm gonna train")
         train_dataset = load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=False)
         global_step, tr_loss = train(args, train_dataset, model, tokenizer)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
