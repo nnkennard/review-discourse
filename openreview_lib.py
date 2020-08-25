@@ -10,7 +10,7 @@ def get_datasets(dataset_file, debug=False):
   with open(dataset_file, 'r') as f:
     examples = json.loads(f.read())
 
-  guest_client = openreview.Client(baseurl='https://openreview.net')
+  guest_client = openreview.Client(baseurl='https://api.openreview.net')
   conference = examples["conference"]
   assert conference in Conference.ALL 
 
