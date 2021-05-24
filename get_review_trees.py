@@ -9,16 +9,17 @@ def main():
   review_iterator = openreview.tools.iterget_notes(guest_client,
       invitation='ICLR.cc/2019/Conference/-/Paper.*/Public_Comment')
   for review in review_iterator:
-    pairs.append((review.id, review.replyto))
+    pairs.append((review.id, review.replyto, review))
 
   review_iterator = openreview.tools.iterget_notes(guest_client,
      invitation='ICLR.cc/2019/Conference/-/Paper.*/Official_Review')
   for review in review_iterator:
-    pairs.append((review.id, review.replyto))
+    pairs.append((review.id, review.replyto, review))
 
 
-  for i, j in pairs:
+  for i, j, k in pairs:
     if i == j:
+      dsds
       print("oh")
 
   children, parents = zip(*pairs)
